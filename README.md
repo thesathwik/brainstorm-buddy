@@ -1,6 +1,22 @@
 # Proactive Brainstorm Bot
 
-A proactive AI bot for VC boardroom brainstorming sessions that intelligently monitors conversations and intervenes when it can add value.
+An AI-powered chat application that intelligently monitors conversations and provides contextual assistance without being intrusive.
+
+## Features
+
+- **Smart Intervention**: Monitors chat flow and responds only when valuable input is needed
+- **Topic Drift Detection**: Redirects conversations back to business/investment topics when they drift to personal matters
+- **@bot Summoning**: Users can directly ask questions by mentioning @bot
+- **VC Analyst Tone**: Provides insights in a conversational, confident style suitable for business discussions
+- **Real-time Chat**: WebSocket-based interface with ngrok tunneling for easy sharing
+
+## Quick Start
+
+```bash
+./launch-for-friends.sh
+```
+
+Share the generated ngrok URL to start collaborative brainstorming sessions.
 
 ## Project Structure
 

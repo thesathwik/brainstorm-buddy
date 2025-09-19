@@ -458,19 +458,19 @@ export class WebChatServer {
       }
     }
 
-    // HIGHEST PRIORITY: Direct data/market questions - should almost always respond
-    if (informationGaps.hasOpportunity && informationGaps.score > 0.6 && isDirectQuestion) {
+    // HIGHEST PRIORITY: Topic drift (when conversation goes off-topic)
+    if (driftResult.isDrifting && driftResult.severity > 0.7) { // Lowered threshold for better detection
+      shouldRespond = true;
+      interventionType = 'topic_redirect';
+      confidence = driftResult.severity;
+      reasoning = `Topic drift detected (severity: ${(driftResult.severity * 100).toFixed(1)}%)`;
+    }
+    // SECOND PRIORITY: Direct data/market questions (but only if on-topic)
+    else if (informationGaps.hasOpportunity && informationGaps.score > 0.6 && isDirectQuestion && !driftResult.isDrifting) {
       shouldRespond = true;
       interventionType = 'information_provide';
       confidence = informationGaps.score;
       reasoning = `Direct question detected: ${informationGaps.reasoning}`;
-    }
-    // MEDIUM PRIORITY: Severe topic drift
-    else if (driftResult.isDrifting && driftResult.severity > 0.8) {
-      shouldRespond = true;
-      interventionType = 'topic_redirect';
-      confidence = driftResult.severity;
-      reasoning = `Severe topic drift detected (severity: ${(driftResult.severity * 100).toFixed(1)}%)`;
     }
     // LOW PRIORITY: General information opportunities (much more restrictive)
     else if (informationGaps.hasOpportunity && informationGaps.score > 0.8 && !isDirectQuestion) {
@@ -539,43 +539,30 @@ export class WebChatServer {
 
     if (interventionType === 'summoned') {
       prompt = `
-      You are a knowledgeable VC analyst assistant. The user asked: "${query}"
+      You are a sharp VC analyst in a brainstorming session. The user asked: "${query}"
 
       Recent conversation:
       ${conversationText}
 
-      Provide a specific, helpful response that directly addresses their question. If they're asking about:
-      - Market cap/size: Provide specific numbers and recent data
-      - Valuations: Give current market multiples and recent funding rounds
-      - Competition: Name specific companies and their positions
-      - Growth rates: Cite actual percentages and timeframes
-
-      Be conversational but informative. Give concrete data when possible.
+      Give a punchy, confident response (2-3 sentences max). Be conversational and direct - like you're contributing to a VC discussion, not writing a report. Provide specific insights when possible, but don't hedge excessively. Match the energy and tone of the conversation.
       `;
     } else if (interventionType === 'topic_redirect') {
       prompt = `
-      The VC conversation has gone significantly off-topic.
+      The conversation has drifted away from investment/business topics to personal matters.
 
       Recent conversation:
       ${conversationText}
 
-      Provide a gentle but clear redirection. Be specific about what investment topic you're suggesting they return to based on their earlier discussion.
-      Don't be generic - reference specific aspects they were discussing earlier.
+      Provide a friendly but clear redirection back to the investment discussion. Be specific about what they were discussing earlier (like Cursor AI, valuations, market analysis). Keep it brief and natural - 1-2 sentences max.
       `;
     } else if (interventionType === 'information_provide') {
       prompt = `
-      You are a VC analyst. The conversation indicates a clear information need.
+      You're a VC analyst jumping into this conversation. They need specific information.
 
       Recent conversation:
       ${conversationText}
 
-      Provide ONE specific, valuable insight that directly relates to what they're discussing. Examples:
-      - Specific market data/statistics
-      - Recent funding news
-      - Competitive intelligence
-      - Financial metrics
-
-      Be specific and actionable, not generic.
+      Jump in with ONE specific, valuable insight (1-2 sentences). Be direct and conversational - like dropping a key fact into the discussion. No lengthy explanations.
       `;
     }
 
@@ -600,14 +587,25 @@ export class WebChatServer {
     const lastMessage = recentMessages[recentMessages.length - 1]?.originalMessage.content || '';
 
     if (interventionType === 'summoned') {
-      if (lastMessage.toLowerCase().includes('market cap')) {
-        return "The AI code editor market is valued at approximately $1.2B in 2024, growing at 25% CAGR. GitHub Copilot alone has 1.8M+ paid subscribers generating significant revenue for Microsoft.";
+      if (lastMessage.toLowerCase().includes('market cap') || lastMessage.toLowerCase().includes('market size')) {
+        return "AI code editor market hit $1.2B in 2024, growing 25% annually. GitHub Copilot alone has 1.8M+ paying users.";
       }
-      return "I'm here to help with investment analysis and market insights. What specific area would you like to explore?";
+      if (lastMessage.toLowerCase().includes('bubble') || lastMessage.toLowerCase().includes('overvalued')) {
+        return "Valuations are definitely stretched, but the productivity gains are real. Enterprise adoption is accelerating fast.";
+      }
+      if (lastMessage.toLowerCase().includes('competition') || lastMessage.toLowerCase().includes('competitive')) {
+        return "It's heating up - Microsoft leads with Copilot, but Cursor and Codeium are gaining ground with better UX.";
+      }
+      return "What specific aspect are you thinking about?";
     } else if (interventionType === 'topic_redirect') {
-      return "Should we focus back on the investment decision? There are still some key areas like market positioning and competitive moats we could analyze.";
+      // Check what they were discussing before
+      const recentContent = recentMessages.map(m => m.originalMessage.content).join(' ').toLowerCase();
+      if (recentContent.includes('cursor') || recentContent.includes('ai') || recentContent.includes('investment')) {
+        return "Should we get back to the Cursor AI investment discussion? Still some key angles to explore.";
+      }
+      return "Let's refocus on the investment opportunity we were discussing.";
     } else {
-      return "Based on current market dynamics, this could be an interesting opportunity to analyze further.";
+      return "Interesting point - could be worth diving deeper.";
     }
   }
 
@@ -664,16 +662,31 @@ export class WebChatServer {
       'startup', 'company', 'business', 'financial', 'strategy', 'competitive',
       'metrics', 'analysis', 'opportunity', 'portfolio', 'venture', 'capital',
       'ai', 'artificial intelligence', 'code editor', 'cursor', 'github', 'copilot',
-      'software', 'tech', 'saas', 'subscription', 'enterprise', 'productivity'
+      'software', 'tech', 'saas', 'subscription', 'enterprise', 'productivity',
+      'series', 'round', 'exit', 'ipo', 'acquisition', 'bubble', 'overvalued'
+    ];
+
+    // Explicit off-topic indicators
+    const offTopicKeywords = [
+      'headphones', 'music', 'audio', 'sound', 'budget', 'price', 'cost',
+      'buy', 'purchase', 'shopping', 'recommendations', 'personal', 'lifestyle',
+      'food', 'restaurant', 'movie', 'weather', 'sports', 'vacation', 'travel'
     ];
 
     const text = conversationText.toLowerCase();
+
+    // Check for explicit off-topic content
+    const offTopicMatches = offTopicKeywords.filter(keyword => text.includes(keyword)).length;
+    if (offTopicMatches > 0) {
+      return 0.1; // Very low relevance for off-topic content
+    }
+
     const keywordMatches = vcKeywords.filter(keyword => text.includes(keyword)).length;
 
-    // More generous scoring - AI/tech discussions are highly relevant
-    const relevanceScore = Math.min(1, keywordMatches / 3); // Only 3 keywords needed for full relevance
+    // More strict scoring - require more keywords for relevance
+    const relevanceScore = Math.min(1, keywordMatches / 2); // Need 2+ keywords for full relevance
 
-    return Math.max(0.3, relevanceScore); // Higher minimum relevance (0.3 instead of 0.1)
+    return Math.max(0.2, relevanceScore); // Lower minimum but still some baseline
   }
 
 
