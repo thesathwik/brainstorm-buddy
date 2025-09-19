@@ -1,0 +1,43 @@
+{
+  "name": "proactive-brainstorm-bot",
+  "version": "1.0.0",
+  "description": "A proactive AI bot for VC boardroom brainstorming sessions",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/startup.ts",
+    "web": "ts-node src/web-server.ts",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:integration": "vitest run tests/integration/CompleteSystemIntegration.test.ts --run",
+    "test:e2e": "vitest run tests/e2e/VCConversationScenario.test.ts --run",
+    "lint": "eslint src/**/*.ts",
+    "start": "node dist/startup.js",
+    "start:prod": "NODE_ENV=production node dist/startup.js",
+    "start:web": "node dist/web-server.js"
+  },
+  "keywords": [
+    "ai",
+    "bot",
+    "vc",
+    "brainstorm",
+    "gemini"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^16.0.0",
+    "ws": "^8.18.3"
+  }
+}

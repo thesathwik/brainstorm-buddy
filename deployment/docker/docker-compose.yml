@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  proactive-bot:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: proactive-brainstorm-bot
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ENABLE_LEARNING=${ENABLE_LEARNING:-true}
+      - TOPIC_DRIFT_THRESHOLD=${TOPIC_DRIFT_THRESHOLD:-0.7}
+      - INFO_GAP_THRESHOLD=${INFO_GAP_THRESHOLD:-0.6}
+      - FACT_CHECK_THRESHOLD=${FACT_CHECK_THRESHOLD:-0.8}
+      - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-60000}
+      - METRICS_INTERVAL=${METRICS_INTERVAL:-30000}
+    volumes:
+      - bot-logs:/var/log/proactive-bot
+      - bot-data:/app/data
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis for session storage and caching
+  redis:
+    image: redis:7-alpine
+    container_name: proactive-bot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - bot-network
+    command: redis-server --appendonly yes
+
+  # Optional: Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: proactive-bot-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - bot-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+volumes:
+  bot-logs:
+  bot-data:
+  redis-data:
+  prometheus-data:
+
+networks:
+  bot-network:
+    driver: bridge
